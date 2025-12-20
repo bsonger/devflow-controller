@@ -1,0 +1,23 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: devflow
+  namespace: app
+spec:
+  hostnames:
+    - devflow.bei.com
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: https
+      namespace: istio-system
+  rules:
+    - backendRefs:
+        - name: devflow
+          namespace: app
+          port: 8080
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /

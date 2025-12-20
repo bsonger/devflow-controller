@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devflow
+  namespace: app
+  annotations:
+    sidecar.istio.io/tracer: "otlp"
+    sidecar.istio.io/tracingAddress: "trace-collector.observability.svc.cluster.local:4317"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: devflow
+  template:
+    metadata:
+      labels:
+        app: devflow
+    spec:
+      containers:
+        - name: devflow
+          image: registry.cn-hangzhou.aliyuncs.com/devflow/devopsflow-app:latest
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/devflow/config   # 挂载到容器内路径
+              readOnly: true
+      volumes:
+        - name: config-volume
+          configMap:
+            name: devflow

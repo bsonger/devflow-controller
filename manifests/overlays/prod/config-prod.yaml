@@ -1,0 +1,16 @@
+server:
+  port: 8080
+mongo:
+  uri: "mongodb://devflow:devflow@192.168.1.5:31746/devflow?authSource=devflow"
+  db: "devflow"
+log:
+  level: "info"
+  format: "json"   # json | console
+otel:
+  endpoint: "collector.open-telemetry.svc.cluster.local:4317"
+  service_name: "devflow-platform"
+repo:
+  address: "https://github.com/bsonger/manifests.git"
+  path: "manifests"
+consul:
+  key: app/devflow

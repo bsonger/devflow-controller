@@ -1,0 +1,10 @@
+resources:
+  - ../../base
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+  - name: devflow
+    namespace: app
+    files:
+      - config-prod.yaml
+    behavior: replace

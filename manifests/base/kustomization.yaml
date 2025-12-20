@@ -1,0 +1,9 @@
+resources:
+  - deployment.yaml
+  - service.yaml
+  - httpRoute.yaml
+configMapGenerator:
+  - name: devflow
+    namespace: app
+    files:
+      - config.yaml

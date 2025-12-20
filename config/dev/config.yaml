@@ -1,0 +1,12 @@
+mongo:
+  uri: "mongodb://devflow:devflow@mongodb.database.svc.cluster.local:27017/devflow?authSource=devflow"
+  db: "devflow"
+
+log:
+  level: "info"
+  format: "json"   # json | console
+
+otel:
+  endpoint: "collector.open-telemetry.svc.cluster.local:4317"
+  service_name: "devflow"
+

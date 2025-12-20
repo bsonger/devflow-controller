@@ -1,0 +1,13 @@
+mongo:
+  uri: "mongodb://devflow:devflow@mongodb.database.svc.cluster.local:27017/devflow?authSource=devflow"
+  db: "devflow"
+
+log:
+  level: "info"
+  format: "json"   # json | console
+
+otel:
+  endpoint: "trace-demo-collector.open-telemetry.svc.cluster.local:4317"
+  insecure: true   # 如果不启用 TLS
+  service_name: "devflow"
+
