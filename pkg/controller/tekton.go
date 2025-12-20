@@ -67,6 +67,7 @@ func StartTektonInformer(ctx context.Context) error {
 func onTaskRun(obj interface{}) {
 	tr := obj.(*v1.TaskRun)
 	ctx := context.Background()
+	ctx = generateParentSpanCtx(ctx, tr.Annotations)
 	logging.Logger.Debug("TaskRun event",
 		zap.String("taskRun", tr.Name),
 		zap.String("pipelineRun", tr.Labels["tekton.dev/pipelineRun"]),
@@ -140,6 +141,7 @@ func onPipelineRun(obj interface{}) {
 	pr := obj.(*v1.PipelineRun)
 	ctx := context.Background()
 
+	ctx = generateParentSpanCtx(ctx, pr.Annotations)
 	labels := pr.GetLabels()
 	if labels == nil {
 		labels = map[string]string{}
@@ -243,17 +245,8 @@ func createPipeLineSpan(ctx context.Context, pr *v1.PipelineRun) {
 }
 
 func createTaskRunSpan(ctx context.Context, tr *v1.TaskRun) {
-	annotations := tr.GetAnnotations()
-	if annotations == nil {
-		return
-	}
 
-	traceIDStr := annotations[model.TraceIDAnnotation]
-	parentSpanIDStr := annotations[model.SpanAnnotation]
-	if traceIDStr == "" || parentSpanIDStr == "" {
-		// 没有 trace 信息，不创建 span
-		return
-	}
+	parentCtx := generateParentSpanCtx(ctx, tr.Annotations)
 
 	startTime := tr.Status.StartTime.Time
 	if tr.Status.CompletionTime == nil {
@@ -261,26 +254,6 @@ func createTaskRunSpan(ctx context.Context, tr *v1.TaskRun) {
 		return
 	}
 	endTime := tr.Status.CompletionTime.Time
-
-	// 将 label 的 traceID/parentSpanID 转换成 OpenTelemetry SpanContext
-	traceID, err := trace.TraceIDFromHex(traceIDStr)
-	if err != nil {
-		logging.Logger.Error("Invalid traceID", zap.String("traceID", traceIDStr), zap.Error(err))
-		return
-	}
-	parentSpanID, err := trace.SpanIDFromHex(parentSpanIDStr)
-	if err != nil {
-		logging.Logger.Error("Invalid parentSpanID", zap.String("parentSpanID", parentSpanIDStr), zap.Error(err))
-		return
-	}
-
-	sc := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID:    traceID,
-		SpanID:     parentSpanID,
-		TraceFlags: trace.FlagsSampled,
-	})
-
-	parentCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
 
 	tracer := otel.Tracer("devflow-controller")
 	_, span := tracer.Start(parentCtx, tr.Name, trace.WithTimestamp(startTime))
@@ -292,4 +265,38 @@ func createTaskRunSpan(ctx context.Context, tr *v1.TaskRun) {
 		attribute.String("pipelineTask", tr.Labels["tekton.dev/pipelineTask"]),
 	)
 	logging.Logger.Info("create span complete", zap.String("taskRun", tr.Name))
+}
+
+func generateParentSpanCtx(ctx context.Context, annotations map[string]string) context.Context {
+	if annotations == nil {
+		return ctx
+	}
+
+	traceIDStr := annotations[model.TraceIDAnnotation]
+	parentSpanIDStr := annotations[model.SpanAnnotation]
+	if traceIDStr == "" || parentSpanIDStr == "" {
+		// 没有 trace 信息，不创建 span
+		return ctx
+	}
+
+	// 将 label 的 traceID/parentSpanID 转换成 OpenTelemetry SpanContext
+	traceID, err := trace.TraceIDFromHex(traceIDStr)
+	if err != nil {
+		logging.Logger.Error("Invalid traceID", zap.String("traceID", traceIDStr), zap.Error(err))
+		return ctx
+	}
+	parentSpanID, err := trace.SpanIDFromHex(parentSpanIDStr)
+	if err != nil {
+		logging.Logger.Error("Invalid parentSpanID", zap.String("parentSpanID", parentSpanIDStr), zap.Error(err))
+		return ctx
+	}
+
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     parentSpanID,
+		TraceFlags: trace.FlagsSampled,
+	})
+	parentCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
+
+	return parentCtx
 }
