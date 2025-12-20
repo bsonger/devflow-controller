@@ -64,10 +64,10 @@ func (s *manifestService) UpdateStepStatus(ctx context.Context, pipelineID, task
 	}
 
 	if start != nil {
-		update["steps.$.start_time"] = bson.M{"$ifNull": []interface{}{"$steps.$.start_time", start}}
+		update["steps.$.start_time"] = *start // 直接写 time.Time
 	}
 	if end != nil {
-		update["steps.$.end_time"] = end
+		update["steps.$.end_time"] = *end
 	}
 
 	filter := bson.M{
