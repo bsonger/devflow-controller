@@ -3,7 +3,7 @@ module github.com/bsonger/devflow-controller
 go 1.25.4
 
 require (
-	github.com/bsonger/devflow-common v0.0.0-20251220135614-d8ec753a4b8b
+	github.com/bsonger/devflow-common v0.0.0-20251220174114-c8e7c8c2b697
 	github.com/spf13/viper v1.21.0
 	github.com/tektoncd/pipeline v1.7.0
 	go.mongodb.org/mongo-driver v1.17.6

@@ -3,15 +3,17 @@ package controller
 import (
 	"context"
 	"github.com/bsonger/devflow-common/client/logging"
-	"go.uber.org/zap"
-	"reflect"
-
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	informers "github.com/tektoncd/pipeline/pkg/client/informers/externalversions"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	"knative.dev/pkg/apis"
+	"reflect"
 
 	"github.com/bsonger/devflow-common/client/tekton"
 	"github.com/bsonger/devflow-common/model"
@@ -129,6 +131,9 @@ func onTaskRun(obj interface{}) {
 			logging.Logger.Error("Failed to update TaskRun status label", zap.String("taskRun", tr.Name), zap.Error(err))
 		}
 	}
+	if tr.Status.StartTime != nil && tr.Status.CompletionTime != nil {
+		createTaskRunSpan(ctx, tr)
+	}
 }
 
 func onPipelineRun(obj interface{}) {
@@ -180,4 +185,110 @@ func onPipelineRun(obj interface{}) {
 			logging.Logger.Error("Failed to update status label", zap.String("pipelineRun", pr.Name), zap.Error(err))
 		}
 	}
+
+	//// ✅ 只有当 StartTime 和 CompletionTime 都存在时才创建 span
+	//if pr.Status.StartTime != nil && pr.Status.CompletionTime != nil {
+	//	// 创建 span 的逻辑
+	//	createPipeLineSpan(ctx, pr)
+	//}
+}
+
+func createPipeLineSpan(ctx context.Context, pr *v1.PipelineRun) {
+
+	annotations := pr.GetAnnotations()
+	if annotations == nil {
+		return
+	}
+
+	traceIDStr := annotations[model.TraceIDAnnotation]
+	parentSpanIDStr := annotations[model.SpanAnnotation]
+
+	if traceIDStr == "" || parentSpanIDStr == "" {
+		// 没有 trace 信息，不创建 span
+		return
+	}
+
+	startTime := pr.Status.StartTime.Time
+	if pr.Status.CompletionTime == nil {
+		// TaskRun 还没结束，不创建 span
+		return
+	}
+	endTime := pr.Status.CompletionTime.Time
+
+	tracer := otel.Tracer("devflow-controller")
+
+	// 将 label 的 traceID/parentSpanID 转换成 OpenTelemetry SpanContext
+	traceID, err := trace.TraceIDFromHex(traceIDStr)
+	if err != nil {
+		logging.Logger.Error("Invalid traceID", zap.String("traceID", traceIDStr), zap.Error(err))
+		return
+	}
+	parentSpanID, err := trace.SpanIDFromHex(parentSpanIDStr)
+	if err != nil {
+		logging.Logger.Error("Invalid parentSpanID", zap.String("parentSpanID", parentSpanIDStr), zap.Error(err))
+		return
+	}
+
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     parentSpanID,
+		TraceFlags: trace.FlagsSampled,
+	})
+
+	parentCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
+
+	// 创建 span，从 startTime 到 endTime
+	_, span := tracer.Start(parentCtx, pr.Name, trace.WithTimestamp(startTime))
+	span.End(trace.WithTimestamp(endTime))
+}
+
+func createTaskRunSpan(ctx context.Context, tr *v1.TaskRun) {
+	labels := tr.GetLabels()
+	if labels == nil {
+		return
+	}
+
+	traceIDStr := labels[model.TraceIDAnnotation]
+	parentSpanIDStr := labels[model.SpanAnnotation]
+	if traceIDStr == "" || parentSpanIDStr == "" {
+		// 没有 trace 信息，不创建 span
+		return
+	}
+
+	startTime := tr.Status.StartTime.Time
+	if tr.Status.CompletionTime == nil {
+		// TaskRun 还没结束，不创建 span
+		return
+	}
+	endTime := tr.Status.CompletionTime.Time
+
+	// 将 label 的 traceID/parentSpanID 转换成 OpenTelemetry SpanContext
+	traceID, err := trace.TraceIDFromHex(traceIDStr)
+	if err != nil {
+		logging.Logger.Error("Invalid traceID", zap.String("traceID", traceIDStr), zap.Error(err))
+		return
+	}
+	parentSpanID, err := trace.SpanIDFromHex(parentSpanIDStr)
+	if err != nil {
+		logging.Logger.Error("Invalid parentSpanID", zap.String("parentSpanID", parentSpanIDStr), zap.Error(err))
+		return
+	}
+
+	sc := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     parentSpanID,
+		TraceFlags: trace.FlagsSampled,
+	})
+
+	parentCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
+
+	tracer := otel.Tracer("devflow-controller")
+	_, span := tracer.Start(parentCtx, tr.Name, trace.WithTimestamp(startTime))
+	defer span.End(trace.WithTimestamp(endTime))
+
+	// 可以添加一些 attribute
+	span.SetAttributes(
+		attribute.String("pipelineRun", tr.Labels["tekton.dev/pipelineRun"]),
+		attribute.String("pipelineTask", tr.Labels["tekton.dev/pipelineTask"]),
+	)
 }
