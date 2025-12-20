@@ -9,5 +9,5 @@ log:
 otel:
   endpoint: "trace-demo-collector.open-telemetry.svc.cluster.local:4317"
   insecure: true   # 如果不启用 TLS
-  service_name: "devflow"
+  service_name: "devflow-controller"
 
