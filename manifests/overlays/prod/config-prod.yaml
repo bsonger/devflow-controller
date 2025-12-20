@@ -8,7 +8,7 @@ log:
   format: "json"   # json | console
 otel:
   endpoint: "collector.open-telemetry.svc.cluster.local:4317"
-  service_name: "devflow-platform"
+  service_name: "devflow-controller"
 repo:
   address: "https://github.com/bsonger/manifests.git"
   path: "manifests"

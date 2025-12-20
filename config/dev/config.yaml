@@ -8,5 +8,5 @@ log:
 
 otel:
   endpoint: "collector.open-telemetry.svc.cluster.local:4317"
-  service_name: "devflow"
+  service_name: "devflow-controller"
 

@@ -243,13 +243,13 @@ func createPipeLineSpan(ctx context.Context, pr *v1.PipelineRun) {
 }
 
 func createTaskRunSpan(ctx context.Context, tr *v1.TaskRun) {
-	labels := tr.GetLabels()
-	if labels == nil {
+	annotations := tr.GetAnnotations()
+	if annotations == nil {
 		return
 	}
 
-	traceIDStr := labels[model.TraceIDAnnotation]
-	parentSpanIDStr := labels[model.SpanAnnotation]
+	traceIDStr := annotations[model.TraceIDAnnotation]
+	parentSpanIDStr := annotations[model.SpanAnnotation]
 	if traceIDStr == "" || parentSpanIDStr == "" {
 		// 没有 trace 信息，不创建 span
 		return
@@ -291,4 +291,5 @@ func createTaskRunSpan(ctx context.Context, tr *v1.TaskRun) {
 		attribute.String("pipelineRun", tr.Labels["tekton.dev/pipelineRun"]),
 		attribute.String("pipelineTask", tr.Labels["tekton.dev/pipelineTask"]),
 	)
+	logging.Logger.Info("create span complete", zap.String("taskRun", tr.Name))
 }
