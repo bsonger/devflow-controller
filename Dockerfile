@@ -34,7 +34,5 @@ COPY --from=builder /app/devflow-controller .
 RUN adduser -D devuser
 USER devuser
 
-# 可选：创建配置和日志目录挂载点
-RUN mkdir -p /app/config /app/logs
 
 ENTRYPOINT ["./devflow-controller"]
