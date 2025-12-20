@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"github.com/bsonger/devflow-common/client/logging"
 	"go.uber.org/zap"
 	"reflect"
@@ -121,7 +120,6 @@ func onTaskRun(obj interface{}) {
 		_ = manifest.ManifestService.UpdateStepStatus(ctx, pipelineID, taskName, model.StepFailed, cond.Message, nil, &end)
 	}
 
-	fmt.Println(newStatusLabel, labels["status"])
 	// 4️⃣ 更新 TaskRun Label
 	if labels["status"] != newStatusLabel {
 		labels["status"] = newStatusLabel
