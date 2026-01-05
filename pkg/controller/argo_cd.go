@@ -64,7 +64,7 @@ func StartArgoApplicationInformer(ctx context.Context) error {
 func onApplication(parentCtx context.Context, obj interface{}) {
 	app := obj.(*argov1alpha1.Application)
 
-	jobID := app.Annotations[model.JobIDLabel]
+	jobID := app.Labels[model.JobIDLabel]
 	if jobID == "" {
 		return
 	}
