@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"github.com/bsonger/devflow-common/client/argo"
 	"github.com/bsonger/devflow-common/client/logging"
 	"github.com/bsonger/devflow-common/client/mongo"
@@ -25,7 +26,10 @@ func Init(ctx context.Context, cfg *config.Config) (func(context.Context) error,
 	}
 
 	// 3️⃣ Mongo
-	mongo.InitMongo(ctx, cfg.Mongo, logging.Logger)
+	fmt.Println(ctx, cfg.Mongo, logging.Logger)
+	if _, err := mongo.InitMongo(ctx, cfg.Mongo, logging.Logger); err != nil {
+		return nil, err
+	}
 	//if err := ensureMongoIndex(ctx); err != nil {
 	//	return nil, err
 	//}

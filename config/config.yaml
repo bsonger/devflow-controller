@@ -1,5 +1,5 @@
 mongo:
-  uri: "mongodb://devflow:devflow@192.168.1.5:31746/devflow?authSource=devflow"
+  uri: "mongodb://devflow:devflow@192.168.1.2:32282/devflow?authSource=devflow"
   db: "devflow"
 log:
   level: "info"

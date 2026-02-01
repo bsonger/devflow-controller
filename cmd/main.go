@@ -38,6 +38,9 @@ func main() {
 	if err := controller.StartArgoApplicationInformer(rootCtx); err != nil {
 		log.Fatal("start tekton informer failed:", err)
 	}
+	if err := controller.StartJobResourceInformer(rootCtx); err != nil {
+		log.Fatal("start job resource informer failed:", err)
+	}
 
 	log.Println("DevFlow Controller started, waiting for events...")
 

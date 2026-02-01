@@ -84,6 +84,8 @@ github.com/antlr4-go/antlr/v4 v4.13.0 h1:lxCg3LAv+EUK6t1i0y1V6/SLeUi0eKEKdhQAlS8
 github.com/antlr4-go/antlr/v4 v4.13.0/go.mod h1:pfChB/xh/Unjila75QW7+VU4TSnWnnk9UTnmpPaOR2g=
 github.com/argoproj/argo-cd/v3 v3.2.2 h1:B3iYpde7gK99GKAeMPAr89FHFVJ/KaxvLH2mxVoS8xM=
 github.com/argoproj/argo-cd/v3 v3.2.2/go.mod h1:yBOyjF3211AWgDm+gOfU30YbgebZ7JYkVBtxpQ8oAmA=
+github.com/argoproj/argo-rollouts v1.8.3 h1:blbtQva4IK9r6gFh+dWkCrLnFdPOWiv9ubQYu36qeaA=
+github.com/argoproj/argo-rollouts v1.8.3/go.mod h1:kCAUvIfMGfOyVf3lvQbBt0nqQn4Pd+zB5/YwKv+UBa8=
 github.com/argoproj/gitops-engine v0.7.1-0.20251217140045-5baed5604d2d h1:iUJYrbSvpV9n8vyl1sBt1GceM60HhHfnHxuzcm5apDg=
 github.com/argoproj/gitops-engine v0.7.1-0.20251217140045-5baed5604d2d/go.mod h1:PauXVUVcfiTgC+34lDdWzPS101g4NpsUtDAjFBnWf94=
 github.com/argoproj/pkg v0.13.7-0.20230626144333-d56162821bd1 h1:qsHwwOJ21K2Ao0xPju1sNuqphyMnMYkyB3ZLoLtxWpo=
@@ -285,8 +287,9 @@ github.com/golang/mock v1.3.1/go.mod h1:sBzyDLLjw3U8JLTeZvSv8jJB+tU5PVekmnlKIyFU
 github.com/golang/mock v1.4.0/go.mod h1:UOMv5ysSaYNkG+OFQykRIcU/QvvxJf3p21QfJ2Bt3cw=
 github.com/golang/mock v1.4.1/go.mod h1:UOMv5ysSaYNkG+OFQykRIcU/QvvxJf3p21QfJ2Bt3cw=
 github.com/golang/mock v1.4.3/go.mod h1:UOMv5ysSaYNkG+OFQykRIcU/QvvxJf3p21QfJ2Bt3cw=
-github.com/golang/mock v1.4.4 h1:l75CXGRSwbaYNpl/Z2X1XIIAMSCquvXgpVZDhwEIJsc=
 github.com/golang/mock v1.4.4/go.mod h1:l3mdAwkq5BuhzHwde/uurv3sEJeZMXNpwsxVWU71h+4=
+github.com/golang/mock v1.6.0 h1:ErTB+efbowRARo13NNdxyJji2egdxLGQhRaY+DUumQc=
+github.com/golang/mock v1.6.0/go.mod h1:p6yTPP+5HYm5mzsMV8JkE6ZKdX+/wYM6Hr+LicevLPs=
 github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
 github.com/golang/snappy v1.0.0 h1:Oy607GVXHs7RtbggtPBnr2RmDArIsAefDwvrdWvRhGs=

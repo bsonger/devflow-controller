@@ -4,6 +4,7 @@ go 1.25.6
 
 require (
 	github.com/argoproj/argo-cd/v3 v3.2.2
+	github.com/argoproj/argo-rollouts v1.8.3
 	github.com/argoproj/gitops-engine v0.7.1-0.20251217140045-5baed5604d2d
 	github.com/bsonger/devflow-common v0.0.0-20260105205634-9a198dbb2377
 	github.com/spf13/viper v1.21.0

@@ -4,6 +4,7 @@ import (
 	"context"
 	"go.opentelemetry.io/otel/attribute"
 	"reflect"
+	"time"
 
 	argov1alpha1 "github.com/argoproj/argo-cd/v3/pkg/apis/application/v1alpha1"
 	argoinformers "github.com/argoproj/argo-cd/v3/pkg/client/informers/externalversions"
@@ -68,6 +69,7 @@ func onApplication(parentCtx context.Context, obj interface{}) {
 	if jobID == "" {
 		return
 	}
+	cacheJobID(app.Name, jobID)
 
 	// 生成 trace 上下文（如果有）
 	ctx := generateParentSpanCtx(parentCtx, app.Annotations)
@@ -94,6 +96,8 @@ func onApplication(parentCtx context.Context, obj interface{}) {
 		)
 		return
 	}
+
+	updateJobApplyStep(ctx, jobID, app, message, jobStatus)
 
 	// ============================
 	// 2️⃣ 终态打点（仅一次）
@@ -212,4 +216,44 @@ func isTerminalJob(status model.JobStatus) bool {
 func isOperationFinished(app *argov1alpha1.Application) bool {
 	return app.Status.OperationState != nil &&
 		app.Status.OperationState.FinishedAt != nil
+}
+
+func updateJobApplyStep(ctx context.Context, jobID string, app *argov1alpha1.Application, message string, jobStatus model.JobStatus) {
+	j, err := job.JobService.GetJobWithSteps(ctx, jobID)
+	if err != nil {
+		logging.Logger.Warn("get job with steps failed", zap.String("jobID", jobID), zap.Error(err))
+		return
+	}
+
+	stepName := findApplyStepName(j.Steps)
+	if stepName == "" {
+		return
+	}
+
+	stepStatus := model.StepRunning
+	progress := int32(0)
+	switch jobStatus {
+	case model.JobSucceeded:
+		stepStatus = model.StepSucceeded
+		progress = 100
+	case model.JobFailed:
+		stepStatus = model.StepFailed
+		progress = 100
+	default:
+	}
+
+	var start *time.Time
+	var end *time.Time
+	if app.Status.OperationState != nil {
+		if !app.Status.OperationState.StartedAt.IsZero() {
+			start = stepStartTime(j.Steps, stepName, app.Status.OperationState.StartedAt.Time)
+		}
+		if app.Status.OperationState.FinishedAt != nil && (jobStatus == model.JobSucceeded || jobStatus == model.JobFailed) {
+			end = stepEndTime(j.Steps, stepName, app.Status.OperationState.FinishedAt.Time)
+		}
+	}
+
+	if err := job.JobService.UpdateJobStep(ctx, jobID, stepName, stepStatus, progress, message, start, end); err != nil {
+		logging.Logger.Warn("update apply step failed", zap.String("jobID", jobID), zap.Error(err))
+	}
 }
