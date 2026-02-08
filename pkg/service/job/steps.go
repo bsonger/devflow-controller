@@ -10,14 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-type JobStep struct {
-	Name      string           `bson:"name" json:"name"`
-	Progress  int32            `bson:"progress" json:"progress"`
-	Status    model.StepStatus `bson:"status" json:"status"`
-	Message   string           `bson:"message,omitempty" json:"message,omitempty"`
-	StartTime *time.Time       `bson:"start_time,omitempty" json:"start_time,omitempty"`
-	EndTime   *time.Time       `bson:"end_time,omitempty" json:"end_time,omitempty"`
-}
+type JobStep = model.JobStep
 
 type JobWithSteps struct {
 	model.Job `bson:",inline"`
@@ -58,6 +51,19 @@ func (s *jobService) UpdateJobStep(ctx context.Context, jobID, stepName string, 
 		progress = 100
 	}
 
+	currentStep, err := s.findJobStep(ctx, oid, stepName)
+	if err != nil {
+		return err
+	}
+
+	if currentStep == nil {
+		return s.createJobStepIfNotExists(ctx, oid, stepName, status, progress, message, start, end)
+	}
+
+	if currentStep.Status == model.StepFailed || currentStep.Status == model.StepSucceeded {
+		return nil
+	}
+
 	update := bson.M{
 		"steps.$.status":   status,
 		"steps.$.progress": progress,
@@ -84,4 +90,53 @@ func (s *jobService) UpdateJobStep(ctx context.Context, jobID, stepName string, 
 	}
 
 	return mongo.Repo.UpdateOne(ctx, &model.Job{}, filter, bson.M{"$set": update})
+}
+
+func (s *jobService) createJobStepIfNotExists(ctx context.Context, jobID primitive.ObjectID, stepName string, status model.StepStatus, progress int32, message string, start, end *time.Time) error {
+	step := model.JobStep{
+		Name:      stepName,
+		Progress:  progress,
+		Status:    status,
+		Message:   message,
+		StartTime: start,
+		EndTime:   end,
+	}
+
+	filter := bson.M{
+		"_id": jobID,
+		"steps": bson.M{
+			"$not": bson.M{
+				"$elemMatch": bson.M{
+					"name": stepName,
+				},
+			},
+		},
+	}
+
+	update := bson.M{
+		"$push": bson.M{
+			"steps": step,
+		},
+		"$set": bson.M{
+			"updated_at": time.Now(),
+		},
+	}
+
+	return mongo.Repo.UpdateOne(ctx, &model.Job{}, filter, update)
+}
+
+func (s *jobService) findJobStep(ctx context.Context, jobID primitive.ObjectID, stepName string) (*model.JobStep, error) {
+	var j JobWithSteps
+	if err := mongo.Repo.FindByID(ctx, &j, jobID); err != nil {
+		return nil, err
+	}
+
+	for _, step := range j.Steps {
+		if step.Name == stepName {
+			s := step
+			return &s, nil
+		}
+	}
+
+	return nil, nil
 }
