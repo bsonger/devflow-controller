@@ -1,7 +1,7 @@
 # -----------------------------
 # 1️⃣ Builder Stage
 # -----------------------------
-FROM registry.cn-hangzhou.aliyuncs.com/devflow/golang:1.25.6 AS builder
+FROM registry.cn-hangzhou.aliyuncs.com/devflow/golang:1.25.7 AS builder
 
 WORKDIR /app
 

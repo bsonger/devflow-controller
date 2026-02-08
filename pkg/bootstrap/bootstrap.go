@@ -13,7 +13,7 @@ import (
 
 func Init(ctx context.Context, cfg *config.Config) (func(context.Context) error, error) {
 	// 1️⃣ Logger
-	logging.InitZapLogger(ctx, cfg.Log)
+	logging.InitZapLogger(cfg.Log)
 
 	// 2️⃣ Otel（可选）
 	var shutdown func(context.Context) error = func(context.Context) error { return nil }
