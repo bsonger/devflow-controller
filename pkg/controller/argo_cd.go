@@ -16,12 +16,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
-)
-
-const (
-	JobIDAnnotation = "devflow.io/job-id"
 )
 
 // ============================
@@ -33,10 +28,6 @@ func StartArgoApplicationInformer(ctx context.Context) error {
 	factory := argoinformers.NewSharedInformerFactoryWithOptions(
 		argo.ArgoCdClient,
 		0,
-		argoinformers.WithTweakListOptions(func(options *metav1.ListOptions) {
-			// 只监听 DevFlow 创建的 Application
-			options.LabelSelector = "status notin (Succeeded,Failed)"
-		}),
 	)
 	informer := factory.Argoproj().V1alpha1().Applications().Informer()
 
@@ -63,10 +54,17 @@ func StartArgoApplicationInformer(ctx context.Context) error {
 // ============================
 
 func onApplication(parentCtx context.Context, obj interface{}) {
-	app := obj.(*argov1alpha1.Application)
+	app, ok := obj.(*argov1alpha1.Application)
+	if !ok || app == nil {
+		logging.Logger.Warn(stepSyncFailedMsg,
+			zap.String("stage", "argo.application.type_assert"),
+		)
+		return
+	}
 
 	jobID := app.Labels[model.JobIDLabel]
 	if jobID == "" {
+		logging.Logger.Debug("skip application sync due to missing job id label", zap.String("app", app.Name))
 		return
 	}
 	cacheJobID(app.Name, jobID)
@@ -74,42 +72,26 @@ func onApplication(parentCtx context.Context, obj interface{}) {
 	// 生成 trace 上下文（如果有）
 	ctx := generateParentSpanCtx(parentCtx, app.Annotations)
 
-	jobStatus, message := mapApplicationToJobStatus(app)
+	stepStatus, progress, message := mapApplicationToApplyStep(app)
 
 	logging.Logger.Info("Argo Application state changed",
 		zap.String("app", app.Name),
 		zap.String("namespace", app.Namespace),
 		zap.String("jobID", jobID),
-		zap.String("jobStatus", string(jobStatus)),
+		zap.String("stepStatus", string(stepStatus)),
+		zap.Int32("progress", progress),
 		zap.String("sync", string(app.Status.Sync.Status)),
 		zap.String("health", string(app.Status.Health.Status)),
 	)
 
-	// ============================
-	// 1️⃣ 更新 Job 状态（幂等）
-	// ============================
-
-	if err := job.JobService.UpdateJobStatus(ctx, jobID, jobStatus); err != nil {
-		logging.Logger.Error("update job status failed",
-			zap.String("jobID", jobID),
-			zap.Error(err),
-		)
-		return
-	}
-
-	updateJobApplyStep(ctx, jobID, app, message, jobStatus)
+	updateJobApplyStep(ctx, jobID, app, message, stepStatus, progress)
 
 	// ============================
 	// 2️⃣ 终态打点（仅一次）
 	// ============================
 
-	if isTerminalJob(jobStatus) && isOperationFinished(app) {
-		createApplicationSpan(ctx, app, jobStatus, message)
-		app.Labels["status"] = string(jobStatus)
-		_, err := argo.ArgoCdClient.ArgoprojV1alpha1().Applications("argocd").Update(ctx, app, metav1.UpdateOptions{})
-		if err != nil {
-			logging.Logger.Error("update application failed")
-		}
+	if isTerminalStep(stepStatus) && isOperationFinished(app) {
+		createApplicationSpan(ctx, app, stepStatus, message)
 	}
 }
 
@@ -117,25 +99,25 @@ func onApplication(parentCtx context.Context, obj interface{}) {
 // 状态映射逻辑（关键）
 // ============================
 
-func mapApplicationToJobStatus(app *argov1alpha1.Application) (model.JobStatus, string) {
+func mapApplicationToApplyStep(app *argov1alpha1.Application) (model.StepStatus, int32, string) {
 
 	sync := app.Status.Sync.Status
 	healthStatus := app.Status.Health.Status
 
 	switch {
 	case sync == argov1alpha1.SyncStatusCodeOutOfSync:
-		return model.JobRunning, "Application syncing"
+		return model.StepRunning, 30, "Application syncing"
 
 	case sync == argov1alpha1.SyncStatusCodeSynced &&
 		healthStatus == health.HealthStatusHealthy:
-		return model.JobSucceeded, "Application healthy"
+		return model.StepSucceeded, 100, "Application healthy"
 
 	case healthStatus == health.HealthStatusDegraded ||
 		healthStatus == health.HealthStatusMissing:
-		return model.JobFailed, "Application degraded"
+		return model.StepFailed, 100, "Application degraded"
 
 	default:
-		return model.JobRunning, "Application progressing"
+		return model.StepRunning, 0, "Application progressing"
 	}
 }
 
@@ -143,7 +125,7 @@ func mapApplicationToJobStatus(app *argov1alpha1.Application) (model.JobStatus, 
 // Span 相关
 // ============================
 
-func createApplicationSpan(ctx context.Context, app *argov1alpha1.Application, status model.JobStatus, message string) {
+func createApplicationSpan(ctx context.Context, app *argov1alpha1.Application, status model.StepStatus, message string) {
 
 	op := app.Status.OperationState
 	if op == nil || op.FinishedAt == nil {
@@ -194,7 +176,7 @@ func createApplicationSpan(ctx context.Context, app *argov1alpha1.Application, s
 		attribute.String("namespace", app.Namespace),
 		attribute.String("syncStatus", string(app.Status.Sync.Status)),
 		attribute.String("healthStatus", string(app.Status.Health.Status)),
-		attribute.String("jobStatus", string(status)),
+		attribute.String("stepStatus", string(status)),
 		attribute.String("message", message),
 	)
 
@@ -209,8 +191,8 @@ func createApplicationSpan(ctx context.Context, app *argov1alpha1.Application, s
 // 工具函数
 // ============================
 
-func isTerminalJob(status model.JobStatus) bool {
-	return status == model.JobSucceeded || status == model.JobFailed
+func isTerminalStep(status model.StepStatus) bool {
+	return status == model.StepSucceeded || status == model.StepFailed
 }
 
 func isOperationFinished(app *argov1alpha1.Application) bool {
@@ -218,10 +200,14 @@ func isOperationFinished(app *argov1alpha1.Application) bool {
 		app.Status.OperationState.FinishedAt != nil
 }
 
-func updateJobApplyStep(ctx context.Context, jobID string, app *argov1alpha1.Application, message string, jobStatus model.JobStatus) {
+func updateJobApplyStep(ctx context.Context, jobID string, app *argov1alpha1.Application, message string, stepStatus model.StepStatus, progress int32) {
 	j, err := job.JobService.GetJobWithSteps(ctx, jobID)
 	if err != nil {
-		logging.Logger.Warn("get job with steps failed", zap.String("jobID", jobID), zap.Error(err))
+		logging.Logger.Warn(stepSyncFailedMsg,
+			zap.String("stage", "argo.application.get_job"),
+			zap.String("jobID", jobID),
+			zap.Error(err),
+		)
 		return
 	}
 
@@ -230,30 +216,25 @@ func updateJobApplyStep(ctx context.Context, jobID string, app *argov1alpha1.App
 		return
 	}
 
-	stepStatus := model.StepRunning
-	progress := int32(0)
-	switch jobStatus {
-	case model.JobSucceeded:
-		stepStatus = model.StepSucceeded
-		progress = 100
-	case model.JobFailed:
-		stepStatus = model.StepFailed
-		progress = 100
-	default:
-	}
-
 	var start *time.Time
 	var end *time.Time
 	if app.Status.OperationState != nil {
 		if !app.Status.OperationState.StartedAt.IsZero() {
 			start = stepStartTime(j.Steps, stepName, app.Status.OperationState.StartedAt.Time)
 		}
-		if app.Status.OperationState.FinishedAt != nil && (jobStatus == model.JobSucceeded || jobStatus == model.JobFailed) {
+		if app.Status.OperationState.FinishedAt != nil && isTerminalStep(stepStatus) {
 			end = stepEndTime(j.Steps, stepName, app.Status.OperationState.FinishedAt.Time)
 		}
 	}
 
 	if err := job.JobService.UpdateJobStep(ctx, jobID, stepName, stepStatus, progress, message, start, end); err != nil {
-		logging.Logger.Warn("update apply step failed", zap.String("jobID", jobID), zap.Error(err))
+		logging.Logger.Warn(stepSyncFailedMsg,
+			zap.String("stage", "argo.application.apply_step_update"),
+			zap.String("jobID", jobID),
+			zap.String("stepName", stepName),
+			zap.String("stepStatus", string(stepStatus)),
+			zap.Int32("progress", progress),
+			zap.Error(err),
+		)
 	}
 }

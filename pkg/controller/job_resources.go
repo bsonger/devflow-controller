@@ -107,7 +107,11 @@ func onDeployment(obj interface{}) {
 
 	j, err := job.JobService.GetJobWithSteps(ctx, jobID)
 	if err != nil {
-		logging.Logger.Warn("get job with steps failed", zap.String("jobID", jobID), zap.Error(err))
+		logging.Logger.Warn(stepSyncFailedMsg,
+			zap.String("stage", "deployment.get_job"),
+			zap.String("jobID", jobID),
+			zap.Error(err),
+		)
 		return
 	}
 
@@ -148,7 +152,14 @@ func onDeployment(obj interface{}) {
 	}
 
 	if err := job.JobService.UpdateJobStep(ctx, jobID, deployStepName, status, progress, message, start, end); err != nil {
-		logging.Logger.Warn("update deployment step failed", zap.String("jobID", jobID), zap.Error(err))
+		logging.Logger.Warn(stepSyncFailedMsg,
+			zap.String("stage", "deployment.step_update"),
+			zap.String("jobID", jobID),
+			zap.String("stepName", deployStepName),
+			zap.String("stepStatus", string(status)),
+			zap.Int32("progress", progress),
+			zap.Error(err),
+		)
 	}
 }
 
@@ -160,7 +171,10 @@ func onRollout(obj interface{}) {
 
 	var rollout rolloutv1alpha1.Rollout
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, &rollout); err != nil {
-		logging.Logger.Warn("convert rollout failed", zap.Error(err))
+		logging.Logger.Warn(stepSyncFailedMsg,
+			zap.String("stage", "rollout.convert"),
+			zap.Error(err),
+		)
 		return
 	}
 
@@ -172,7 +186,11 @@ func onRollout(obj interface{}) {
 
 	j, err := job.JobService.GetJobWithSteps(ctx, jobID)
 	if err != nil {
-		logging.Logger.Warn("get job with steps failed", zap.String("jobID", jobID), zap.Error(err))
+		logging.Logger.Warn(stepSyncFailedMsg,
+			zap.String("stage", "rollout.get_job"),
+			zap.String("jobID", jobID),
+			zap.Error(err),
+		)
 		return
 	}
 
@@ -208,7 +226,18 @@ func handleCanaryRollout(ctx context.Context, j *job.JobWithSteps, rollout *roll
 			now := time.Now()
 			end := stepEndTime(j.Steps, step.Name, now)
 			message := fmt.Sprintf("canary weight %d%% (target %d%%)", current, step.Target)
-			_ = job.JobService.UpdateJobStep(ctx, j.ID.Hex(), step.Name, model.StepSucceeded, 100, message, start, end)
+			if err := job.JobService.UpdateJobStep(ctx, j.ID.Hex(), step.Name, model.StepSucceeded, 100, message, start, end); err != nil {
+				logging.Logger.Warn(
+					stepSyncFailedMsg,
+					zap.String("stage", "rollout.canary.step_update"),
+					zap.String("jobID", j.ID.Hex()),
+					zap.String("stepName", step.Name),
+					zap.Int("target", step.Target),
+					zap.Int("current", current),
+					zap.String("stepStatus", string(model.StepSucceeded)),
+					zap.Error(err),
+				)
+			}
 			prevTarget = step.Target
 			continue
 		}
@@ -225,7 +254,19 @@ func handleCanaryRollout(ctx context.Context, j *job.JobWithSteps, rollout *roll
 	progress := segmentPercent(current, prevTarget, step.Target)
 	start := stepStartTime(j.Steps, step.Name, rollout.CreationTimestamp.Time)
 	message := fmt.Sprintf("canary weight %d%% (target %d%%)", current, step.Target)
-	_ = job.JobService.UpdateJobStep(ctx, j.ID.Hex(), step.Name, model.StepRunning, progress, message, start, nil)
+	if err := job.JobService.UpdateJobStep(ctx, j.ID.Hex(), step.Name, model.StepRunning, progress, message, start, nil); err != nil {
+		logging.Logger.Warn(
+			stepSyncFailedMsg,
+			zap.String("stage", "rollout.canary.step_update"),
+			zap.String("jobID", j.ID.Hex()),
+			zap.String("stepName", step.Name),
+			zap.Int("target", step.Target),
+			zap.Int("current", current),
+			zap.Int32("progress", progress),
+			zap.String("stepStatus", string(model.StepRunning)),
+			zap.Error(err),
+		)
+	}
 }
 
 func handleBlueGreenRollout(ctx context.Context, j *job.JobWithSteps, rollout *rolloutv1alpha1.Rollout) {
@@ -254,7 +295,19 @@ func handleBlueGreenRollout(ctx context.Context, j *job.JobWithSteps, rollout *r
 	}
 
 	if greenStepName != "" {
-		_ = job.JobService.UpdateJobStep(ctx, j.ID.Hex(), greenStepName, greenStatus, progress, message, start, greenEnd)
+		if err := job.JobService.UpdateJobStep(ctx, j.ID.Hex(), greenStepName, greenStatus, progress, message, start, greenEnd); err != nil {
+			logging.Logger.Warn(
+				stepSyncFailedMsg,
+				zap.String("stage", "rollout.bluegreen.green_step_update"),
+				zap.String("jobID", j.ID.Hex()),
+				zap.String("stepName", greenStepName),
+				zap.Int32("updated", updated),
+				zap.Int32("desired", desired),
+				zap.Int32("progress", progress),
+				zap.String("stepStatus", string(greenStatus)),
+				zap.Error(err),
+			)
+		}
 	}
 
 	if trafficStepName == "" {
@@ -279,7 +332,18 @@ func handleBlueGreenRollout(ctx context.Context, j *job.JobWithSteps, rollout *r
 	}
 
 	trafficStart := stepStartTime(j.Steps, trafficStepName, rollout.CreationTimestamp.Time)
-	_ = job.JobService.UpdateJobStep(ctx, j.ID.Hex(), trafficStepName, trafficStatus, trafficProgress, trafficMessage, trafficStart, trafficEnd)
+	if err := job.JobService.UpdateJobStep(ctx, j.ID.Hex(), trafficStepName, trafficStatus, trafficProgress, trafficMessage, trafficStart, trafficEnd); err != nil {
+		logging.Logger.Warn(
+			stepSyncFailedMsg,
+			zap.String("stage", "rollout.bluegreen.traffic_step_update"),
+			zap.String("jobID", j.ID.Hex()),
+			zap.String("stepName", trafficStepName),
+			zap.Bool("promoted", promoted),
+			zap.Int32("progress", trafficProgress),
+			zap.String("stepStatus", string(trafficStatus)),
+			zap.Error(err),
+		)
+	}
 }
 
 func blueGreenPromoted(rollout *rolloutv1alpha1.Rollout) bool {
