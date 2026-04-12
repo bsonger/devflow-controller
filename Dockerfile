@@ -20,12 +20,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o
 # -----------------------------
 # 2️⃣ Runtime Stage
 # -----------------------------
-FROM alpine:3.19
+FROM alpine:3.22
 
 WORKDIR /app
 
 # 安装证书，保证 https 请求可用
-RUN apk add --no-cache ca-certificates bash
+RUN apk add --no-cache ca-certificates bash && \
+    apk upgrade --no-cache libcrypto3 libssl3
 
 # 复制二进制
 COPY --from=builder /app/devflow-controller .
